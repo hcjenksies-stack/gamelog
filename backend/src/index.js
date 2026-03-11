@@ -42,7 +42,7 @@ app.use("/feed",    feedRoutes);    // activity feed
 app.use("/sync",    syncRoutes);    // admin: RAWG sync trigger + status
 
 // Simple liveness check used by Railway health monitoring
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req, res) => res.json({ ok: true, version: "1.1.0", deployedVia: "github" }));
 
 // ── Global error handler ──────────────────────────────────────────────────────
 // Catches any error passed to next(err) and returns a consistent JSON shape
