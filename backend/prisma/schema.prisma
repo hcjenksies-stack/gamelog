@@ -1,0 +1,333 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ────────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  online
+  idle
+  dnd
+  offline
+}
+
+enum Platform {
+  ps5
+  xbox
+  steam
+  switch
+  pc
+}
+
+enum StreamPlatform {
+  twitch
+  youtube
+  twitter
+}
+
+enum ActivityType {
+  live
+  review
+  blurb
+  progress
+  achievement
+}
+
+// ─── USER ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id              Int       @id @default(autoincrement())
+  username        String    @unique
+  handle          String    @unique
+  email           String    @unique
+  passwordHash    String
+  avatar          String    @default("?")   // single char shown in avatar
+  avatarColor     String    @default("#5865f2")
+  bio             String?
+  country         String?
+  age             Int?
+  isPublic        Boolean   @default(true)
+  isVerified      Boolean   @default(false)
+  isInfluencer    Boolean   @default(false)
+  liveNow         Boolean   @default(false)
+  currentGame     String?
+  currentPlatform Platform?
+  status          UserStatus @default(offline)
+  refreshToken    String?
+
+  // profile
+  avatarUrl       String?   // base64 or CDN URL for profile photo
+  phone           String?   // optional, for friend discovery
+
+  // platform connections
+  discordId       String?   @unique
+  discordUsername String?
+  discordAvatar   String?
+  psnHandle       String?
+  xboxGamertag    String?
+  steamId         String?   @unique
+  steamUsername   String?
+  steamAvatar     String?
+
+  // onboarding
+  onboarded       Boolean   @default(false)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // relations
+  badges          UserBadge[]
+  streams         Stream[]
+  gameLogs        GameLog[]
+  reviews         Review[]
+  blurbs          Blurb[]
+  achievements    Achievement[]
+
+  following       Follow[]   @relation("follower")
+  followers       Follow[]   @relation("following")
+
+  studioFollows   StudioFollow[]
+
+  createdAt_      DateTime  @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+// ─── BADGE ────────────────────────────────────────────────────────────────────
+
+model Badge {
+  key    String  @id   // e.g. "platinum_hunter"
+  icon   String
+  label  String
+  color  String
+  desc   String
+
+  users  UserBadge[]
+
+  @@map("badges")
+}
+
+model UserBadge {
+  userId   Int
+  badgeKey String
+  awardedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeKey], references: [key])
+
+  @@id([userId, badgeKey])
+  @@map("user_badges")
+}
+
+// ─── STREAM LINKS ─────────────────────────────────────────────────────────────
+
+model Stream {
+  id       Int            @id @default(autoincrement())
+  userId   Int
+  platform StreamPlatform
+  url      String
+  label    String
+  live     Boolean        @default(false)
+  viewers  String?        // e.g. "82K"
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform])
+  @@map("streams")
+}
+
+// ─── STUDIO ───────────────────────────────────────────────────────────────────
+
+model Studio {
+  id         String  @id   // slug e.g. "fs"
+  name       String
+  handle     String  @unique
+  avatar     String  // emoji
+  verified   Boolean @default(false)
+  founded    Int?
+  location   String?
+  bio        String?
+  totalGames Int     @default(0)
+  createdAt  DateTime @default(now())
+
+  games     StudioGame[]
+  news      StudioNews[]
+  upcoming  UpcomingGame[]
+  followers StudioFollow[]
+
+  @@map("studios")
+}
+
+model StudioFollow {
+  userId    Int
+  studioId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@id([userId, studioId])
+  @@map("studio_follows")
+}
+
+model StudioNews {
+  id        Int      @id @default(autoincrement())
+  studioId  String
+  type      String   // "announcement" | "update" | "livestream"
+  title     String
+  desc      String
+  createdAt DateTime @default(now())
+
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@map("studio_news")
+}
+
+model UpcomingGame {
+  id          Int       @id @default(autoincrement())
+  studioId    String
+  title       String
+  cover       String?
+  releaseDate DateTime?
+  announced   Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@map("upcoming_games")
+}
+
+// ─── GAME ─────────────────────────────────────────────────────────────────────
+
+model Game {
+  id              Int     @id @default(autoincrement())
+  title           String
+  genre           String
+  cover           String  @default("🎮")  // emoji fallback
+  year            Int?
+  coop            Boolean @default(false)
+  // aggregated from reviews — maintained via application logic
+  avgRating       Float?
+  reviewCount     Int     @default(0)
+  // RAWG data
+  rawgId          Int?    @unique
+  rawgSlug        String?
+  backgroundImage String?   // cover art URL from RAWG
+  metacritic      Int?
+  rawgRating      Float?    // RAWG community rating (0–5)
+  developer       String?   // primary developer name
+  createdAt       DateTime  @default(now())
+
+  studios   StudioGame[]
+  logs      GameLog[]
+  reviews   Review[]
+  blurbs    Blurb[]
+  achievements Achievement[]
+
+  @@map("games")
+}
+
+model StudioGame {
+  gameId   Int
+  studioId String
+
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@id([gameId, studioId])
+  @@map("studio_games")
+}
+
+// ─── GAME LOG (user's personal game entry) ────────────────────────────────────
+
+model GameLog {
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  gameId         Int
+  platform       Platform?
+  progress       Int       @default(0)   // 0-100 %
+  hours          Float     @default(0)
+  trophiesEarned Int       @default(0)
+  trophiesTotal  Int       @default(0)
+  platinum       Boolean   @default(false)
+  coop           Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id])
+
+  @@unique([userId, gameId])
+  @@map("game_logs")
+}
+
+// ─── REVIEW ───────────────────────────────────────────────────────────────────
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  gameId    Int
+  rating    Int      // 1-10
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id])
+
+  @@unique([userId, gameId])
+  @@map("reviews")
+}
+
+// ─── BLURB (short take, no rating) ───────────────────────────────────────────
+
+model Blurb {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  gameId    Int
+  text      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id])
+
+  @@map("blurbs")
+}
+
+// ─── ACHIEVEMENT ──────────────────────────────────────────────────────────────
+
+model Achievement {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  gameId    Int
+  name      String
+  icon      String?
+  rarity    String?  // "Common" | "Uncommon" | "Rare" | "Ultra Rare"
+  pct       Float?   // % of players who have it
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id])
+
+  @@map("achievements")
+}
+
+// ─── FOLLOW (user ↔ user) ─────────────────────────────────────────────────────
+
+model Follow {
+  followerId  Int
+  followingId Int
+  favorited   Boolean  @default(false)   // "Priority" friend
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("follower",  fields: [followerId],  references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@map("follows")
+}
