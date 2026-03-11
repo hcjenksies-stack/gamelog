@@ -2,7 +2,7 @@
 // Covers posting short unrated takes on games (max 280 chars), listing them,
 // and deleting your own.
 
-const request = require("supertest");
+const { req } = require("../helpers/request");
 const jwt     = require("jsonwebtoken");
 
 jest.mock("@prisma/client", () => {
@@ -36,29 +36,23 @@ const mockBlurb = {
 describe("POST /blurbs", () => {
   it("creates a blurb", async () => {
     db.blurb.create.mockResolvedValue(mockBlurb);
-    const res = await request(app)
-      .post("/blurbs")
-      .set(authHeader())
-      .send({ gameId: 5, text: "This game is awesome" });
+    const res = await req(app, "POST", "/blurbs", { headers: authHeader(), body: { gameId: 5, text: "This game is awesome" } });
     expect(res.status).toBe(201);
     expect(res.body.text).toBe("This game is awesome");
   });
 
   it("returns 400 when text exceeds 280 characters", async () => {
-    const res = await request(app)
-      .post("/blurbs")
-      .set(authHeader())
-      .send({ gameId: 5, text: "x".repeat(281) });
+    const res = await req(app, "POST", "/blurbs", { headers: authHeader(), body: { gameId: 5, text: "x".repeat(281) } });
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when required fields are missing", async () => {
-    const res = await request(app).post("/blurbs").set(authHeader()).send({ gameId: 5 });
+    const res = await req(app, "POST", "/blurbs", { headers: authHeader(), body: { gameId: 5 } });
     expect(res.status).toBe(400);
   });
 
   it("returns 401 when not authenticated", async () => {
-    const res = await request(app).post("/blurbs").send({ gameId: 5, text: "cool" });
+    const res = await req(app, "POST", "/blurbs", { body: { gameId: 5, text: "cool" } });
     expect(res.status).toBe(401);
   });
 });
@@ -66,7 +60,7 @@ describe("POST /blurbs", () => {
 describe("GET /blurbs/game/:gameId", () => {
   it("returns blurbs for a game", async () => {
     db.blurb.findMany.mockResolvedValue([mockBlurb]);
-    const res = await request(app).get("/blurbs/game/5");
+    const res = await req(app, "GET", "/blurbs/game/5");
     expect(res.status).toBe(200);
     expect(res.body[0].text).toBe("This game is awesome");
   });
@@ -76,14 +70,14 @@ describe("DELETE /blurbs/:id", () => {
   it("deletes own blurb", async () => {
     db.blurb.findUnique.mockResolvedValue({ ...mockBlurb, userId: 1 });
     db.blurb.delete.mockResolvedValue({});
-    const res = await request(app).delete("/blurbs/1").set(authHeader());
+    const res = await req(app, "DELETE", "/blurbs/1", { headers: authHeader() });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
   });
 
   it("returns 403 when deleting another user's blurb", async () => {
     db.blurb.findUnique.mockResolvedValue({ ...mockBlurb, userId: 99 });
-    const res = await request(app).delete("/blurbs/1").set(authHeader());
+    const res = await req(app, "DELETE", "/blurbs/1", { headers: authHeader() });
     expect(res.status).toBe(403);
   });
 });

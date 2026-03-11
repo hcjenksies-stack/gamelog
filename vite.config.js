@@ -6,14 +6,14 @@ export default defineConfig({
   plugins: [react()],
   server:  { port: 5173 },
   test: {
-    // Run tests in a browser-like environment so DOM APIs and localStorage work
-    environment: "jsdom",
-    // Auto-import vitest globals (describe, it, expect) — no manual imports needed
+    // Node environment — no DOM needed; localStorage is mocked manually in setup.js
+    environment: "node",
+    // Auto-import vitest globals (describe, it, expect, vi) — no imports needed
     globals: true,
-    // Setup file that runs before each test file
+    // Runs before each test file to set up the localStorage mock
     setupFiles: ["./src/tests/setup.js"],
-    // Only pick up frontend tests — backend uses Jest separately
-    include: ["src/tests/**/*.test.{js,jsx}"],
-    exclude: ["backend/**", "node_modules/**"],
+    // Only pick up frontend tests — backend tests use Jest separately
+    include:  ["src/tests/**/*.test.{js,jsx}"],
+    exclude:  ["backend/**", "node_modules/**"],
   },
 });

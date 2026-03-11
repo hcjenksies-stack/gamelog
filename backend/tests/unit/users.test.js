@@ -1,7 +1,7 @@
 // ─── Unit Tests: User Routes ──────────────────────────────────────────────────
 // Covers profile retrieval, updates, user listing, and public profile lookups.
 
-const request = require("supertest");
+const { req } = require("../helpers/request");
 const jwt     = require("jsonwebtoken");
 
 jest.mock("@prisma/client", () => {
@@ -38,13 +38,13 @@ const baseUser = {
 describe("GET /users/me", () => {
   it("returns own profile when authenticated", async () => {
     db.user.findUnique.mockResolvedValue({ ...baseUser });
-    const res = await request(app).get("/users/me").set(authHeader());
+    const res = await req(app, "GET", "/users/me", { headers: authHeader() });
     expect(res.status).toBe(200);
     expect(res.body.username).toBe("alice");
   });
 
   it("returns 401 when not authenticated", async () => {
-    const res = await request(app).get("/users/me");
+    const res = await req(app, "GET", "/users/me");
     expect(res.status).toBe(401);
   });
 });
@@ -52,16 +52,13 @@ describe("GET /users/me", () => {
 describe("PATCH /users/me", () => {
   it("updates allowed profile fields", async () => {
     db.user.update.mockResolvedValue({ ...baseUser, bio: "I play games" });
-    const res = await request(app)
-      .patch("/users/me")
-      .set(authHeader())
-      .send({ bio: "I play games" });
+    const res = await req(app, "PATCH", "/users/me", { headers: authHeader(), body: { bio: "I play games" } });
     expect(res.status).toBe(200);
     expect(res.body.bio).toBe("I play games");
   });
 
   it("returns 401 when not authenticated", async () => {
-    const res = await request(app).patch("/users/me").send({ bio: "x" });
+    const res = await req(app, "PATCH", "/users/me", { body: { bio: "x" } });
     expect(res.status).toBe(401);
   });
 });
@@ -69,7 +66,7 @@ describe("PATCH /users/me", () => {
 describe("GET /users", () => {
   it("returns a list of users", async () => {
     db.user.findMany.mockResolvedValue([baseUser]);
-    const res = await request(app).get("/users");
+    const res = await req(app, "GET", "/users");
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body[0].username).toBe("alice");
@@ -77,7 +74,7 @@ describe("GET /users", () => {
 
   it("supports search by ?q=", async () => {
     db.user.findMany.mockResolvedValue([]);
-    const res = await request(app).get("/users?q=nobody");
+    const res = await req(app, "GET", "/users?q=nobody");
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -86,14 +83,14 @@ describe("GET /users", () => {
 describe("GET /users/:idOrHandle", () => {
   it("returns a public profile by numeric id", async () => {
     db.user.findUnique.mockResolvedValue(baseUser);
-    const res = await request(app).get("/users/1");
+    const res = await req(app, "GET", "/users/1");
     expect(res.status).toBe(200);
     expect(res.body.username).toBe("alice");
   });
 
   it("returns 404 when user does not exist", async () => {
     db.user.findUnique.mockResolvedValue(null);
-    const res = await request(app).get("/users/9999");
+    const res = await req(app, "GET", "/users/9999");
     expect(res.status).toBe(404);
   });
 });

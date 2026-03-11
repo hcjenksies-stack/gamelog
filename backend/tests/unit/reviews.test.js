@@ -2,7 +2,7 @@
 // Covers posting, fetching, editing, and deleting game reviews.
 // Reviews are rated 1–10 and upserted per user/game pair.
 
-const request = require("supertest");
+const { req } = require("../helpers/request");
 const jwt     = require("jsonwebtoken");
 
 jest.mock("@prisma/client", () => {
@@ -42,33 +42,24 @@ describe("POST /reviews", () => {
     db.review.aggregate.mockResolvedValue({ _avg: { rating: 9 }, _count: { rating: 1 } });
     db.game.update.mockResolvedValue({});
 
-    const res = await request(app)
-      .post("/reviews")
-      .set(authHeader())
-      .send({ gameId: 5, rating: 9, body: "Incredible game" });
+    const res = await req(app, "POST", "/reviews", { headers: authHeader(), body: { gameId: 5, rating: 9, body: "Incredible game" } });
 
     expect(res.status).toBe(201);
     expect(res.body.rating).toBe(9);
   });
 
   it("returns 400 when rating is out of range", async () => {
-    const res = await request(app)
-      .post("/reviews")
-      .set(authHeader())
-      .send({ gameId: 5, rating: 11, body: "Too high" });
+    const res = await req(app, "POST", "/reviews", { headers: authHeader(), body: { gameId: 5, rating: 11, body: "Too high" } });
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when required fields are missing", async () => {
-    const res = await request(app)
-      .post("/reviews")
-      .set(authHeader())
-      .send({ gameId: 5 });
+    const res = await req(app, "POST", "/reviews", { headers: authHeader(), body: { gameId: 5 } });
     expect(res.status).toBe(400);
   });
 
   it("returns 401 when not authenticated", async () => {
-    const res = await request(app).post("/reviews").send({ gameId: 5, rating: 8, body: "good" });
+    const res = await req(app, "POST", "/reviews", { body: { gameId: 5, rating: 8, body: "good" } });
     expect(res.status).toBe(401);
   });
 });
@@ -76,7 +67,7 @@ describe("POST /reviews", () => {
 describe("GET /reviews/game/:gameId", () => {
   it("returns all reviews for a game", async () => {
     db.review.findMany.mockResolvedValue([mockReview]);
-    const res = await request(app).get("/reviews/game/5");
+    const res = await req(app, "GET", "/reviews/game/5");
     expect(res.status).toBe(200);
     expect(res.body[0].body).toBe("Incredible game");
   });
@@ -89,19 +80,13 @@ describe("PATCH /reviews/:id", () => {
     db.review.aggregate.mockResolvedValue({ _avg: { rating: 9 }, _count: { rating: 1 } });
     db.game.update.mockResolvedValue({});
 
-    const res = await request(app)
-      .patch("/reviews/1")
-      .set(authHeader())
-      .send({ body: "Updated" });
+    const res = await req(app, "PATCH", "/reviews/1", { headers: authHeader(), body: { body: "Updated" } });
     expect(res.status).toBe(200);
   });
 
   it("returns 403 when editing another user's review", async () => {
     db.review.findUnique.mockResolvedValue({ ...mockReview, userId: 99 });
-    const res = await request(app)
-      .patch("/reviews/1")
-      .set(authHeader({ id: 1, username: "alice" }))
-      .send({ body: "hacked" });
+    const res = await req(app, "PATCH", "/reviews/1", { headers: authHeader({ id: 1, username: "alice" }), body: { body: "hacked" } });
     expect(res.status).toBe(403);
   });
 });
@@ -113,14 +98,14 @@ describe("DELETE /reviews/:id", () => {
     db.review.aggregate.mockResolvedValue({ _avg: { rating: null }, _count: { rating: 0 } });
     db.game.update.mockResolvedValue({});
 
-    const res = await request(app).delete("/reviews/1").set(authHeader());
+    const res = await req(app, "DELETE", "/reviews/1", { headers: authHeader() });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
   });
 
   it("returns 403 when deleting another user's review", async () => {
     db.review.findUnique.mockResolvedValue({ ...mockReview, userId: 99 });
-    const res = await request(app).delete("/reviews/1").set(authHeader());
+    const res = await req(app, "DELETE", "/reviews/1", { headers: authHeader() });
     expect(res.status).toBe(403);
   });
 });

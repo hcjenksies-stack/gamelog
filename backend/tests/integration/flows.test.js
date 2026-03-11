@@ -3,7 +3,7 @@
 // Prisma is still mocked (no real DB needed), but this verifies that the
 // full Express pipeline — routing, middleware, controllers — works end-to-end.
 
-const request = require("supertest");
+const { req } = require("../helpers/request");
 const bcrypt  = require("bcryptjs");
 
 jest.mock("bcryptjs", () => ({
@@ -48,8 +48,8 @@ describe("Auth flow: register → login → access protected route", () => {
     db.user.create.mockResolvedValue(userData);
     db.user.update.mockResolvedValue({});
 
-    const res = await request(app).post("/auth/register").send({
-      username: "flowuser", email: "flow@test.com", password: "pass123",
+    const res = await req(app, "POST", "/auth/register", {
+      body: { username: "flowuser", email: "flow@test.com", password: "pass123" },
     });
     expect(res.status).toBe(201);
     expect(res.body.accessToken).toBeDefined();
@@ -60,8 +60,8 @@ describe("Auth flow: register → login → access protected route", () => {
     db.user.findUnique.mockResolvedValue({ ...userData, passwordHash: "$2b$12$hashed" });
     db.user.update.mockResolvedValue({});
 
-    const res = await request(app).post("/auth/login").send({
-      email: "flow@test.com", password: "pass123",
+    const res = await req(app, "POST", "/auth/login", {
+      body: { email: "flow@test.com", password: "pass123" },
     });
     expect(res.status).toBe(200);
     accessToken = res.body.accessToken;
@@ -78,9 +78,9 @@ describe("Auth flow: register → login → access protected route", () => {
       badges: [], streams: [], _count: { followers: 0, following: 0, gameLogs: 0 },
     });
 
-    const res = await request(app)
-      .get("/users/me")
-      .set("Authorization", `Bearer ${accessToken}`);
+    const res = await req(app, "GET", "/users/me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     expect(res.status).toBe(200);
     expect(res.body.username).toBe("flowuser");
   });
@@ -97,7 +97,7 @@ describe("Game log flow: add game → review → get library", () => {
       game: { id: 5, title: "Hades", cover: "\ud83d\udde1\ufe0f" },
     });
 
-    const res = await request(app).post("/log").set(authHeader).send({ gameId: 5, platform: "PC" });
+    const res = await req(app, "POST", "/log", { headers: authHeader, body: { gameId: 5, platform: "PC" } });
     expect(res.status).toBe(200);
     expect(res.body.gameId).toBe(5);
   });
@@ -111,8 +111,9 @@ describe("Game log flow: add game → review → get library", () => {
     db.review.aggregate.mockResolvedValue({ _avg: { rating: 10 }, _count: { rating: 1 } });
     db.game.update = jest.fn().mockResolvedValue({});
 
-    const res = await request(app).post("/reviews").set(authHeader).send({
-      gameId: 5, rating: 10, body: "Perfect game",
+    const res = await req(app, "POST", "/reviews", {
+      headers: authHeader,
+      body: { gameId: 5, rating: 10, body: "Perfect game" },
     });
     expect(res.status).toBe(201);
     expect(res.body.rating).toBe(10);
@@ -124,7 +125,7 @@ describe("Game log flow: add game → review → get library", () => {
       game: { id: 5, title: "Hades", cover: "\ud83d\udde1\ufe0f", studios: [] },
     }]);
 
-    const res = await request(app).get("/log/me").set(authHeader);
+    const res = await req(app, "GET", "/log/me", { headers: authHeader });
     expect(res.status).toBe(200);
     expect(res.body.length).toBe(1);
   });
@@ -139,7 +140,7 @@ describe("Social flow: follow user → get feed", () => {
     db.user.findUnique.mockResolvedValue({ id: 2, username: "bob" });
     db.follow.upsert.mockResolvedValue({ followerId: 1, followingId: 2 });
 
-    const res = await request(app).post("/follows/2").set(authHeader);
+    const res = await req(app, "POST", "/follows/2", { headers: authHeader });
     expect(res.status).toBe(201);
   });
 
@@ -153,7 +154,7 @@ describe("Social flow: follow user → get feed", () => {
     // Mock user.findMany for live influencer check inside the feed route
     db.user.findMany.mockResolvedValue([]);
 
-    const res = await request(app).get("/feed").set(authHeader);
+    const res = await req(app, "GET", "/feed", { headers: authHeader });
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });

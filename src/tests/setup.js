@@ -1,10 +1,18 @@
 // ─── Vitest Setup ─────────────────────────────────────────────────────────────
-// Runs before each test file. Extends expect with DOM matchers and sets up
-// a mock localStorage since tests run in jsdom, not a real browser.
+// Runs before each test file. Provides a manual localStorage mock so tests
+// work in the Node environment without needing jsdom or @testing-library.
 
-import "@testing-library/jest-dom";
+// Minimal localStorage implementation — matches the browser API exactly
+class LocalStorageMock {
+  constructor() { this._store = {}; }
+  getItem(key)         { return Object.prototype.hasOwnProperty.call(this._store, key) ? this._store[key] : null; }
+  setItem(key, value)  { this._store[key] = String(value); }
+  removeItem(key)      { delete this._store[key]; }
+  clear()              { this._store = {}; }
+}
 
-// Mock localStorage — jsdom provides this but we reset it between tests
-beforeEach(() => {
-  localStorage.clear();
-});
+// Attach to globalThis so api.js can call localStorage.getItem() etc.
+globalThis.localStorage = new LocalStorageMock();
+
+// Reset storage state between every test so tests don't bleed into each other
+beforeEach(() => { globalThis.localStorage.clear(); });

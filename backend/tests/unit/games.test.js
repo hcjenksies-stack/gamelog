@@ -2,7 +2,7 @@
 // Covers the game catalog: listing, searching, fetching a single game,
 // and creating games.
 
-const request = require("supertest");
+const { req } = require("../helpers/request");
 const jwt     = require("jsonwebtoken");
 
 jest.mock("@prisma/client", () => {
@@ -36,20 +36,20 @@ const mockGame = {
 describe("GET /games", () => {
   it("returns a list of games", async () => {
     db.game.findMany.mockResolvedValue([mockGame]);
-    const res = await request(app).get("/games");
+    const res = await req(app, "GET", "/games");
     expect(res.status).toBe(200);
     expect(res.body[0].title).toBe("Elden Ring");
   });
 
   it("filters by genre", async () => {
     db.game.findMany.mockResolvedValue([mockGame]);
-    const res = await request(app).get("/games?genre=RPG");
+    const res = await req(app, "GET", "/games?genre=RPG");
     expect(res.status).toBe(200);
   });
 
   it("supports full-text search by title", async () => {
     db.game.findMany.mockResolvedValue([mockGame]);
-    const res = await request(app).get("/games?q=Elden");
+    const res = await req(app, "GET", "/games?q=Elden");
     expect(res.status).toBe(200);
   });
 });
@@ -57,14 +57,14 @@ describe("GET /games", () => {
 describe("GET /games/:id", () => {
   it("returns a single game with reviews", async () => {
     db.game.findUnique.mockResolvedValue({ ...mockGame, reviews: [], blurbs: [] });
-    const res = await request(app).get("/games/1");
+    const res = await req(app, "GET", "/games/1");
     expect(res.status).toBe(200);
     expect(res.body.title).toBe("Elden Ring");
   });
 
   it("returns 404 when game does not exist", async () => {
     db.game.findUnique.mockResolvedValue(null);
-    const res = await request(app).get("/games/9999");
+    const res = await req(app, "GET", "/games/9999");
     expect(res.status).toBe(404);
   });
 });
@@ -72,20 +72,17 @@ describe("GET /games/:id", () => {
 describe("POST /games", () => {
   it("creates a game when authenticated", async () => {
     db.game.create.mockResolvedValue(mockGame);
-    const res = await request(app)
-      .post("/games")
-      .set(authHeader())
-      .send({ title: "Elden Ring", genre: "RPG" });
+    const res = await req(app, "POST", "/games", { headers: authHeader(), body: { title: "Elden Ring", genre: "RPG" } });
     expect(res.status).toBe(201);
   });
 
   it("returns 400 when title or genre is missing", async () => {
-    const res = await request(app).post("/games").set(authHeader()).send({ title: "X" });
+    const res = await req(app, "POST", "/games", { headers: authHeader(), body: { title: "X" } });
     expect(res.status).toBe(400);
   });
 
   it("returns 401 when not authenticated", async () => {
-    const res = await request(app).post("/games").send({ title: "X", genre: "RPG" });
+    const res = await req(app, "POST", "/games", { body: { title: "X", genre: "RPG" } });
     expect(res.status).toBe(401);
   });
 });

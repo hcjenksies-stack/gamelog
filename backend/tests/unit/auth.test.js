@@ -2,7 +2,7 @@
 // Covers user registration, login, token refresh, and logout.
 // Prisma and bcryptjs are mocked so no real database or hashing occurs.
 
-const request = require("supertest");
+const { req } = require("../helpers/request");
 const jwt     = require("jsonwebtoken");
 const bcrypt  = require("bcryptjs");
 
@@ -42,8 +42,8 @@ describe("POST /auth/register", () => {
     db.user.create.mockResolvedValue({ id: 1, username: "alice", handle: "@alice", email: "alice@test.com", avatar: "A", avatarColor: "#5865f2" });
     db.user.update.mockResolvedValue({});
 
-    const res = await request(app).post("/auth/register").send({
-      username: "alice", email: "alice@test.com", password: "secret123",
+    const res = await req(app, "POST", "/auth/register", {
+      body: { username: "alice", email: "alice@test.com", password: "secret123" },
     });
 
     expect(res.status).toBe(201);
@@ -53,15 +53,15 @@ describe("POST /auth/register", () => {
   });
 
   it("returns 400 when required fields are missing", async () => {
-    const res = await request(app).post("/auth/register").send({ username: "bob" });
+    const res = await req(app, "POST", "/auth/register", { body: { username: "bob" } });
     expect(res.status).toBe(400);
     expect(res.body.error).toBeDefined();
   });
 
   it("returns 409 when email or username is already taken", async () => {
     db.user.findFirst.mockResolvedValue({ id: 99 }); // existing user
-    const res = await request(app).post("/auth/register").send({
-      username: "alice", email: "alice@test.com", password: "secret123",
+    const res = await req(app, "POST", "/auth/register", {
+      body: { username: "alice", email: "alice@test.com", password: "secret123" },
     });
     expect(res.status).toBe(409);
   });
@@ -79,8 +79,8 @@ describe("POST /auth/login", () => {
     bcrypt.compare.mockResolvedValue(true);
     db.user.update.mockResolvedValue({});
 
-    const res = await request(app).post("/auth/login").send({
-      email: "alice@test.com", password: "secret123",
+    const res = await req(app, "POST", "/auth/login", {
+      body: { email: "alice@test.com", password: "secret123" },
     });
 
     expect(res.status).toBe(200);
@@ -91,22 +91,22 @@ describe("POST /auth/login", () => {
     db.user.findUnique.mockResolvedValue(mockUser);
     bcrypt.compare.mockResolvedValue(false);
 
-    const res = await request(app).post("/auth/login").send({
-      email: "alice@test.com", password: "wrongpass",
+    const res = await req(app, "POST", "/auth/login", {
+      body: { email: "alice@test.com", password: "wrongpass" },
     });
     expect(res.status).toBe(401);
   });
 
   it("returns 401 when user does not exist", async () => {
     db.user.findUnique.mockResolvedValue(null);
-    const res = await request(app).post("/auth/login").send({
-      email: "nobody@test.com", password: "pass",
+    const res = await req(app, "POST", "/auth/login", {
+      body: { email: "nobody@test.com", password: "pass" },
     });
     expect(res.status).toBe(401);
   });
 
   it("returns 400 when fields are missing", async () => {
-    const res = await request(app).post("/auth/login").send({ email: "x@y.com" });
+    const res = await req(app, "POST", "/auth/login", { body: { email: "x@y.com" } });
     expect(res.status).toBe(400);
   });
 });
@@ -117,18 +117,18 @@ describe("POST /auth/refresh", () => {
     db.user.findUnique.mockResolvedValue({ id: 1, username: "alice", refreshToken });
     db.user.update.mockResolvedValue({});
 
-    const res = await request(app).post("/auth/refresh").send({ refreshToken });
+    const res = await req(app, "POST", "/auth/refresh", { body: { refreshToken } });
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toBeDefined();
   });
 
   it("returns 400 when refreshToken is missing", async () => {
-    const res = await request(app).post("/auth/refresh").send({});
+    const res = await req(app, "POST", "/auth/refresh", { body: {} });
     expect(res.status).toBe(400);
   });
 
   it("returns 401 when refresh token is invalid", async () => {
-    const res = await request(app).post("/auth/refresh").send({ refreshToken: "badtoken" });
+    const res = await req(app, "POST", "/auth/refresh", { body: { refreshToken: "badtoken" } });
     expect(res.status).toBe(401);
   });
 });
