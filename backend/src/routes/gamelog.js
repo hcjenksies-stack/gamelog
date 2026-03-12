@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 // POST /log — log or update a game for the current user
 router.post("/", requireAuth, async (req, res, next) => {
   try {
-    const { gameId, platform, progress, hours, trophiesEarned, trophiesTotal, platinum, coop } = req.body;
+    const { gameId, platform, progress, hours, trophiesEarned, trophiesTotal, platinum, coop, status } = req.body;
     if (!gameId) return res.status(400).json({ error: "gameId is required" });
 
     const log = await prisma.gameLog.upsert({
@@ -20,6 +20,7 @@ router.post("/", requireAuth, async (req, res, next) => {
         ...(trophiesTotal   !== undefined && { trophiesTotal: parseInt(trophiesTotal) }),
         ...(platinum        !== undefined && { platinum }),
         ...(coop            !== undefined && { coop }),
+        ...(status          !== undefined && { status }),
       },
       create: {
         userId:        req.user.id,
@@ -31,6 +32,7 @@ router.post("/", requireAuth, async (req, res, next) => {
         trophiesTotal: parseInt(trophiesTotal  || 0),
         platinum:      platinum  ?? false,
         coop:          coop      ?? false,
+        status:        status    || "playing",
       },
       include: { game: true },
     });
@@ -43,7 +45,7 @@ router.post("/", requireAuth, async (req, res, next) => {
 router.patch("/:gameId", requireAuth, async (req, res, next) => {
   try {
     const gameId = parseInt(req.params.gameId);
-    const allowed = ["platform", "progress", "hours", "trophiesEarned", "trophiesTotal", "platinum", "coop"];
+    const allowed = ["platform", "progress", "hours", "trophiesEarned", "trophiesTotal", "platinum", "coop", "status"];
     const data = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) data[key] = req.body[key];
@@ -69,11 +71,14 @@ router.delete("/:gameId", requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /log/me — current user's full library
+// GET /log/me — current user's full library (optionally filtered by ?status=wishlist etc.)
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
+    const where = { userId: req.user.id };
+    // Allow filtering by status e.g. ?status=wishlist
+    if (req.query.status) where.status = req.query.status;
     const logs = await prisma.gameLog.findMany({
-      where: { userId: req.user.id },
+      where,
       include: { game: { include: { studios: { include: { studio: true } } } } },
       orderBy: { updatedAt: "desc" },
     });

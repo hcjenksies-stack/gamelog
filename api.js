@@ -57,6 +57,7 @@ export const api = {
 
   // ── Games ─────────────────────────────────────────────────────────────────
   getGames:  (params = {})    => req("GET",    `/games?${new URLSearchParams(params)}`),
+  searchGames: (q)            => req("GET",    `/games?q=${encodeURIComponent(q)}&limit=30`),
   getGame:   (id)             => req("GET",    `/games/${id}`),
 
   // ── Reviews ───────────────────────────────────────────────────────────────
@@ -117,5 +118,7 @@ export function adaptLog(log) {
     },
     rating: game?.avgRating ?? null,
     reviews: game?.reviewCount ?? 0,
+    // Status tracks where the game sits: playing | wishlist | completed | dropped
+    status: log.status || "playing",
   };
 }

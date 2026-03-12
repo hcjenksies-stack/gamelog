@@ -1253,6 +1253,7 @@ const GameInfoSheet = ({ title, onClose, onOpenStudio }) => {
 
   const [dbGame,        setDbGame]        = useState(null);
   const [inLibrary,     setInLibrary]     = useState(false);
+  const [inWishlist,    setInWishlist]    = useState(false);
   const [showLogPicker, setShowLogPicker] = useState(false);
   const [logPlatform,   setLogPlatform]   = useState("ps5");
   const [logDone,       setLogDone]       = useState(false);
@@ -1288,7 +1289,10 @@ const GameInfoSheet = ({ title, onClose, onOpenStudio }) => {
     if (user) {
       api.getMyLibrary().then(logs => {
         const found = logs.find(l => l.game?.title?.toLowerCase() === title.toLowerCase());
-        if (found) setInLibrary(true);
+        if (found) {
+          setInLibrary(found.status !== "wishlist");
+          setInWishlist(found.status === "wishlist");
+        }
       }).catch(() => {});
     }
   }, [title, user]);
@@ -1424,7 +1428,16 @@ const GameInfoSheet = ({ title, onClose, onOpenStudio }) => {
             <button onClick={()=>{ if(!dbGame||!user) return; if(inLibrary){setLogDone(true);}else{setShowLogPicker(p=>!p);} }} style={{ flex:1, padding:"11px", borderRadius:12, background:inLibrary?`${C.green}22`:C.accent, border:inLibrary?`1px solid ${C.green}55`:"none", color:inLibrary?C.greenLight:"#fff", fontFamily:F.body, fontWeight:700, fontSize:13, cursor:"pointer" }}>
               {logDone?"✓ Added!":inLibrary?"✓ In Library":"+ Add to Library"}
             </button>
-            <button style={{ flex:1, padding:"11px", borderRadius:12, background:C.surface2, border:`1px solid ${C.border2}`, color:C.textMuted, fontFamily:F.body, fontWeight:700, fontSize:13, cursor:"pointer" }}>🔖 Wishlist</button>
+            <button onClick={async()=>{
+                if (!dbGame || !user) return;
+                if (inWishlist) return; // already wishlisted
+                try {
+                  await api.logGame({ gameId: dbGame.id, status: "wishlist" });
+                  setInWishlist(true);
+                } catch(e) { console.error(e); }
+              }} style={{ flex:1, padding:"11px", borderRadius:12, background:inWishlist?`${C.gold}22`:C.surface2, border:`1px solid ${inWishlist?C.gold:C.border2}`, color:inWishlist?C.gold:C.textMuted, fontFamily:F.body, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+              {inWishlist ? "🔖 Wishlisted" : "🔖 Wishlist"}
+            </button>
           </div>
           {showLogPicker && !inLibrary && (
             <div style={{ background:C.surface2, border:`1px solid ${C.border2}`, borderRadius:14, padding:14, marginBottom:16 }}>
@@ -2744,24 +2757,97 @@ export default function App() {
   );
 }
 
+// ─── SEARCH RESULT ROW ────────────────────────────────────────────────────────
+// One row in the game search dropdown. Shows cover, title, metacritic score,
+// and buttons to Add to Library or Wishlist.
+const SearchResultRow = ({ game, library, onAdded }) => {
+  const inLib  = library.some(g => g.id === game.id && g.status !== "wishlist");
+  const inWish = library.some(g => g.id === game.id && g.status === "wishlist");
+  const [adding,    setAdding]    = useState(null); // "library" | "wishlist" | null
+  const [addedAs,   setAddedAs]   = useState(inLib ? "library" : inWish ? "wishlist" : null);
+
+  const add = async (status) => {
+    setAdding(status);
+    try {
+      await api.logGame({ gameId: game.id, status });
+      setAddedAs(status);
+      onAdded();
+    } catch(e) { console.error(e); }
+    setAdding(null);
+  };
+
+  return (
+    <div style={{ display:"flex", gap:10, alignItems:"center", padding:"10px 14px", borderBottom:`1px solid ${C.border2}` }}>
+      <div style={{ width:40, height:52, borderRadius:8, overflow:"hidden", flexShrink:0 }}>
+        <GameCover title={game.title} emoji={game.cover || "🎮"} emojiSize={22} imgUrl={game.backgroundImage} />
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontFamily:F.body, fontWeight:700, fontSize:14, color:C.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{game.title}</div>
+        <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:2 }}>
+          {game.genre && <span style={{ fontSize:11, color:C.textMuted, fontFamily:F.body }}>{game.genre}</span>}
+          {game.metacritic && <span style={{ fontSize:11, fontFamily:F.mono, color:game.metacritic>=75?C.greenLight:game.metacritic>=50?C.gold:C.red, fontWeight:700 }}>{game.metacritic}</span>}
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+        {addedAs === "library" ? (
+          <span style={{ fontSize:12, color:C.greenLight, fontFamily:F.body, fontWeight:700 }}>✓ In Library</span>
+        ) : addedAs === "wishlist" ? (
+          <span style={{ fontSize:12, color:C.gold, fontFamily:F.body, fontWeight:700 }}>🔖 Wishlisted</span>
+        ) : (<>
+          <button onClick={()=>add("library")} disabled={!!adding}
+            style={{ padding:"5px 10px", borderRadius:8, background:C.accent, border:"none", color:"#fff", fontFamily:F.body, fontWeight:700, fontSize:11, cursor:"pointer", opacity:adding?"0.6":"1" }}>
+            {adding==="library" ? "..." : "+ Library"}
+          </button>
+          <button onClick={()=>add("wishlist")} disabled={!!adding}
+            style={{ padding:"5px 10px", borderRadius:8, background:C.surface2, border:`1px solid ${C.border2}`, color:C.textMuted, fontFamily:F.body, fontWeight:700, fontSize:11, cursor:"pointer", opacity:adding?"0.6":"1" }}>
+            {adding==="wishlist" ? "..." : "🔖"}
+          </button>
+        </>)}
+      </div>
+    </div>
+  );
+};
+
 // ─── GAMES VIEW (self-contained) ──────────────────────────────────────────────
 function GamesView({ onOpenFriend }) {
-  const [selected, setSelected] = useState(null);
-  const [filter, setFilter] = useState("All");
-  const filters = ["All","Playing","Completed","PS5","Xbox","Steam"];
+  const [selected,   setSelected]   = useState(null);
+  const [filter,     setFilter]     = useState("All");
+  const filters = ["All","Playing","Wishlist","Completed","Dropped"];
 
   const [library, setLibrary] = useState([]);
+  const loadLibrary = () => api.getMyLibrary()
+    .then(logs => { if (logs.length) setLibrary(logs.map(adaptLog)); })
+    .catch(() => {});
+
+  useEffect(() => { loadLibrary(); }, []);
+
+  // Game search state — searches the RAWG-sourced catalog
+  const [searchQuery,   setSearchQuery]   = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchOpen,    setSearchOpen]    = useState(false);
+  const searchRef = React.useRef(null);
+
   useEffect(() => {
-    api.getMyLibrary()
-      .then(logs => { if (logs.length) setLibrary(logs.map(adaptLog)); })
-      .catch(() => {});
-  }, []);
+    if (!searchQuery.trim()) { setSearchResults([]); return; }
+    const t = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const results = await api.searchGames(searchQuery.trim());
+        setSearchResults(results);
+      } catch(_) {}
+      setSearchLoading(false);
+    }, 300); // 300ms debounce — avoids firing on every keystroke
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const filtered = library.filter(g=>{
-    if(filter==="All") return true;
-    if(filter==="Playing") return g.progress<100;
-    if(filter==="Completed") return g.progress===100;
-    return g.platform===filter.toLowerCase();
+    if(filter==="All")       return true;
+    if(filter==="Playing")   return g.status === "playing";
+    if(filter==="Wishlist")  return g.status === "wishlist";
+    if(filter==="Completed") return g.status === "completed";
+    if(filter==="Dropped")   return g.status === "dropped";
+    return true;
   });
 
   const GameSheet = ({ game, onClose }) => {
@@ -2910,22 +2996,45 @@ function GamesView({ onOpenFriend }) {
     );
   };
 
-  const [gameTab, setGameTab] = useState("playing");
-
   return (
     <div>
-      <div style={{ display:"flex", gap:6, marginBottom:12 }}>
-        {[["playing","Playing"],["recs","For You"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setGameTab(id)} style={{ flex:1, padding:"9px", borderRadius:10, background:gameTab===id?C.accentSoft:C.surface, border:`1px solid ${gameTab===id?C.accentLight:C.border}`, color:gameTab===id?C.accentLight:C.textMuted, fontFamily:F.body, fontWeight:700, fontSize:13, cursor:"pointer" }}>
-            {label}
-          </button>
-        ))}
+      {/* ── Search bar ────────────────────────────────────────────────────── */}
+      <div style={{ position:"relative", marginBottom:12 }}>
+        <input
+          ref={searchRef}
+          value={searchQuery}
+          onChange={e=>{ setSearchQuery(e.target.value); setSearchOpen(true); }}
+          onFocus={()=>setSearchOpen(true)}
+          placeholder="🔍  Search games to add..."
+          style={{ width:"100%", background:C.surface2, border:`1px solid ${C.border2}`, borderRadius:12, padding:"10px 14px", color:C.text, fontFamily:F.body, fontSize:14, outline:"none", boxSizing:"border-box" }}
+        />
+        {searchQuery && (
+          <button onClick={()=>{ setSearchQuery(""); setSearchResults([]); setSearchOpen(false); }}
+            style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:C.textMuted, fontSize:16, cursor:"pointer" }}>✕</button>
+        )}
       </div>
 
-      {gameTab==="playing" && <>
-        <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4, marginBottom:12 }}>
-          {filters.map(f=><Pill key={f} active={filter===f} onClick={()=>setFilter(f)}>{f}</Pill>)}
+      {/* ── Search results dropdown ──────────────────────────────────────── */}
+      {searchOpen && searchQuery.trim() && (
+        <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, marginBottom:14, maxHeight:320, overflowY:"auto" }}>
+          {searchLoading && (
+            <div style={{ padding:16, textAlign:"center", color:C.textMuted, fontFamily:F.body, fontSize:13 }}>Searching...</div>
+          )}
+          {!searchLoading && searchResults.length === 0 && (
+            <div style={{ padding:16, textAlign:"center", color:C.textMuted, fontFamily:F.body, fontSize:13 }}>No games found for "{searchQuery}"</div>
+          )}
+          {searchResults.map(game => (
+            <SearchResultRow key={game.id} game={game} library={library} onAdded={()=>{ setSearchQuery(""); setSearchResults([]); setSearchOpen(false); loadLibrary(); }} />
+          ))}
         </div>
+      )}
+
+      {/* ── Status filter pills ───────────────────────────────────────────── */}
+      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4, marginBottom:12 }}>
+        {filters.map(f=><Pill key={f} active={filter===f} onClick={()=>setFilter(f)}>{f}</Pill>)}
+      </div>
+
+      {true && <>
         {filtered.map(g=>{
           const friendsHere = [];
           return (
@@ -2938,10 +3047,16 @@ function GamesView({ onOpenFriend }) {
                     <div style={{ display:"flex", gap:5, flexShrink:0 }}>{g.trophies.platinum&&<span style={{ fontSize:13 }}>🏆</span>}<PlatformBadge id={g.platform} small /></div>
                   </div>
                   <div style={{ fontSize:12, color:C.textMuted, fontFamily:F.body, marginBottom:7 }}>{g.studio} · {g.hours}h</div>
-                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                    <div style={{ flex:1 }}><ProgressBar pct={g.progress} /></div>
-                    <span style={{ fontFamily:F.mono, fontSize:12, color:g.progress===100?C.greenLight:C.accentLight, flexShrink:0 }}>{g.progress===100?"✓":g.progress+"%"}</span>
-                  </div>
+                  {g.status === "wishlist" ? (
+                    <span style={{ fontSize:11, color:C.gold, fontFamily:F.body, fontWeight:700 }}>🔖 Wishlist</span>
+                  ) : g.status === "dropped" ? (
+                    <span style={{ fontSize:11, color:C.textMuted, fontFamily:F.body, fontWeight:700 }}>✕ Dropped</span>
+                  ) : (
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <div style={{ flex:1 }}><ProgressBar pct={g.progress} /></div>
+                      <span style={{ fontFamily:F.mono, fontSize:12, color:g.progress===100?C.greenLight:C.accentLight, flexShrink:0 }}>{g.progress===100?"✓":g.progress+"%"}</span>
+                    </div>
+                  )}
                   {friendsHere.length>0&&(
                     <div style={{ display:"flex", gap:5, alignItems:"center", marginTop:7 }}>
                       <span style={{ fontSize:11, color:"#7983f5" }}>🎧</span>
