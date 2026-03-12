@@ -29,7 +29,9 @@ async function req(method, path, body) {
 
 export const api = {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  register: (data)            => req("POST",   "/auth/register", data),
+  register: (data)            => req("POST",   "/auth/register",        data),
+  forgotPassword: (email)      => req("POST",   "/auth/forgot-password", { email }),
+  resetPassword:  (token, pw)  => req("POST",   "/auth/reset-password",  { token, password: pw }),
   login:    (data)            => req("POST",   "/auth/login",    data),
   logout:   ()                => {
     const refreshToken = localStorage.getItem("gl_refresh");

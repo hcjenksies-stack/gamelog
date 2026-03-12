@@ -117,12 +117,21 @@ function AuthGate({ onAuth }) {
 
   const f = k => e => setForm(p => ({...p, [k]: e.target.value}));
 
+  const [forgotSent, setForgotSent] = useState(false);
+
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      if (mode === "login") await login(form.email, form.password);
-      else                  await register(form.username, form.email, form.password, form.phone || null);
-      onAuth(mode === "register");
+      if (mode === "forgot") {
+        await api.forgotPassword(form.email);
+        setForgotSent(true);
+      } else if (mode === "login") {
+        await login(form.email, form.password);
+        onAuth(false);
+      } else {
+        await register(form.username, form.email, form.password, form.phone || null);
+        onAuth(true);
+      }
     } catch (e) { setError(e.message); }
     finally     { setBusy(false); }
   };
@@ -143,13 +152,22 @@ function AuthGate({ onAuth }) {
       <div style={{ fontFamily:F.body, fontSize:13, color:C.textMuted, marginBottom:32 }}>Your social gaming journal</div>
 
       <div style={{ width:"100%", background:C.surface, borderRadius:20, border:`1px solid ${C.border}`, padding:24 }}>
-        <div style={{ display:"flex", gap:6, marginBottom:20 }}>
-          {["login","register"].map(m => (
-            <button key={m} onClick={() => { setMode(m); setError(null); }} style={{ flex:1, padding:"9px", borderRadius:10, background:mode===m?C.accentSoft:C.surface2, border:`1px solid ${mode===m?C.accentLight:C.border}`, color:mode===m?C.accentLight:C.textMuted, fontFamily:F.body, fontWeight:700, fontSize:13, cursor:"pointer" }}>
-              {m === "login" ? "Sign In" : "Sign Up"}
-            </button>
-          ))}
-        </div>
+        {mode !== "forgot" && (
+          <div style={{ display:"flex", gap:6, marginBottom:20 }}>
+            {["login","register"].map(m => (
+              <button key={m} onClick={() => { setMode(m); setError(null); setForgotSent(false); }} style={{ flex:1, padding:"9px", borderRadius:10, background:mode===m?C.accentSoft:C.surface2, border:`1px solid ${mode===m?C.accentLight:C.border}`, color:mode===m?C.accentLight:C.textMuted, fontFamily:F.body, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                {m === "login" ? "Sign In" : "Sign Up"}
+              </button>
+            ))}
+          </div>
+        )}
+        {mode === "forgot" && (
+          <div style={{ marginBottom:20 }}>
+            <button onClick={() => { setMode("login"); setError(null); setForgotSent(false); }} style={{ background:"none", border:"none", color:C.accentLight, fontFamily:F.body, fontSize:13, cursor:"pointer", padding:0 }}>← Back to Sign In</button>
+            <div style={{ fontFamily:F.body, fontWeight:800, fontSize:18, color:C.text, marginTop:12 }}>Forgot password?</div>
+            <div style={{ fontFamily:F.body, fontSize:13, color:C.textMuted, marginTop:4 }}>Enter your email and we'll send a reset link.</div>
+          </div>
+        )}
 
         {mode === "register" && (<>
           <div style={{ marginBottom:14 }}>
@@ -166,18 +184,34 @@ function AuthGate({ onAuth }) {
           {label("Email")}
           <input type="email" value={form.email} onChange={f("email")} placeholder="you@example.com" style={inputStyle} />
         </div>
-        <div style={{ marginBottom:20 }}>
-          {label("Password")}
-          <input type="password" value={form.password} onChange={f("password")} placeholder="••••••••" onKeyDown={e => e.key==="Enter" && submit()} style={inputStyle} />
-        </div>
+        {mode !== "forgot" && (
+          <div style={{ marginBottom:20 }}>
+            {label("Password")}
+            <input type="password" value={form.password} onChange={f("password")} placeholder="••••••••" onKeyDown={e => e.key==="Enter" && submit()} style={inputStyle} />
+          </div>
+        )}
 
         {error && (
           <div style={{ background:`${C.red}18`, border:`1px solid ${C.red}44`, borderRadius:10, padding:"10px 14px", marginBottom:14, fontFamily:F.body, fontSize:13, color:C.red }}>{error}</div>
         )}
 
-        <button onClick={submit} disabled={busy} style={{ width:"100%", padding:13, borderRadius:12, background:C.accent, border:"none", color:"#fff", fontFamily:F.body, fontWeight:800, fontSize:14, cursor:"pointer", opacity:busy?0.6:1 }}>
-          {busy ? "…" : mode === "login" ? "Sign In" : "Create Account"}
-        </button>
+        {forgotSent ? (
+          <div style={{ background:`${C.green}18`, border:`1px solid ${C.green}44`, borderRadius:12, padding:"14px", textAlign:"center" }}>
+            <div style={{ fontFamily:F.body, fontWeight:700, fontSize:14, color:C.greenLight, marginBottom:4 }}>Check your inbox</div>
+            <div style={{ fontFamily:F.body, fontSize:13, color:C.textMuted }}>If that email is in our system, a reset link is on its way.</div>
+          </div>
+        ) : (
+          <>
+            <button onClick={submit} disabled={busy} style={{ width:"100%", padding:13, borderRadius:12, background:C.accent, border:"none", color:"#fff", fontFamily:F.body, fontWeight:800, fontSize:14, cursor:"pointer", opacity:busy?0.6:1 }}>
+              {busy ? "…" : mode === "login" ? "Sign In" : mode === "forgot" ? "Send reset link" : "Create Account"}
+            </button>
+            {mode === "login" && (
+              <button onClick={() => { setMode("forgot"); setError(null); }} style={{ width:"100%", background:"none", border:"none", color:C.textMuted, fontFamily:F.body, fontSize:12, cursor:"pointer", padding:"10px 0 0", textAlign:"center" }}>
+                Forgot password?
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -2665,6 +2699,63 @@ const NAV = [
   {id:"profile", label:"Profile", icon:"👤"},
 ];
 
+// ─── RESET PASSWORD VIEW ─────────────────────────────────────────────────────
+function ResetPasswordView({ token, onDone }) {
+  const [password,  setPassword]  = useState("");
+  const [password2, setPassword2] = useState("");
+  const [busy,  setBusy]  = useState(false);
+  const [error, setError] = useState(null);
+  const [done,  setDone]  = useState(false);
+
+  const inputStyle = { width:"100%", background:C.surface2, border:`1px solid ${C.border2}`, borderRadius:10, padding:"10px 12px", color:C.text, fontFamily:F.body, fontSize:14, outline:"none", boxSizing:"border-box" };
+
+  const submit = async () => {
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (password !== password2) { setError("Passwords don't match"); return; }
+    setBusy(true); setError(null);
+    try {
+      await api.resetPassword(token, password);
+      setDone(true);
+      setTimeout(onDone, 2000);
+    } catch(e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ maxWidth:430, margin:"0 auto", minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24 }}>
+      <div style={{ fontFamily:F.body, fontWeight:800, fontSize:28, color:C.text, marginBottom:6 }}>
+        <span style={{ color:C.accentLight }}>Game</span>Log
+      </div>
+      <div style={{ fontFamily:F.body, fontSize:13, color:C.textMuted, marginBottom:32 }}>Set a new password</div>
+
+      <div style={{ width:"100%", background:C.surface, borderRadius:20, border:`1px solid ${C.border}`, padding:24 }}>
+        {done ? (
+          <div style={{ textAlign:"center" }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>✓</div>
+            <div style={{ fontFamily:F.body, fontWeight:700, fontSize:16, color:C.greenLight }}>Password updated!</div>
+            <div style={{ fontFamily:F.body, fontSize:13, color:C.textMuted, marginTop:6 }}>Redirecting to sign in…</div>
+          </div>
+        ) : (<>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontFamily:F.body, fontWeight:600, fontSize:12, color:C.textMuted, marginBottom:6 }}>New password</div>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters" style={inputStyle} />
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:F.body, fontWeight:600, fontSize:12, color:C.textMuted, marginBottom:6 }}>Confirm password</div>
+            <input type="password" value={password2} onChange={e=>setPassword2(e.target.value)} placeholder="Repeat password" onKeyDown={e=>e.key==="Enter"&&submit()} style={inputStyle} />
+          </div>
+          {error && (
+            <div style={{ background:`${C.red}18`, border:`1px solid ${C.red}44`, borderRadius:10, padding:"10px 14px", marginBottom:14, fontFamily:F.body, fontSize:13, color:C.red }}>{error}</div>
+          )}
+          <button onClick={submit} disabled={busy} style={{ width:"100%", padding:13, borderRadius:12, background:C.accent, border:"none", color:"#fff", fontFamily:F.body, fontWeight:800, fontSize:14, cursor:"pointer", opacity:busy?0.6:1 }}>
+            {busy ? "…" : "Set new password"}
+          </button>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
 function AppShell() {
   const [tab, setTab] = useState("home");
   const [friendSheet,    setFriendSheet]    = useState(null);
@@ -2674,11 +2765,16 @@ function AppShell() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { user, logout, loading, refreshUser } = useAuth();
 
-  // Check URL for OAuth callbacks (discord, steam)
+  const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get("reset"));
+
+  // Check URL for OAuth callbacks (discord, steam) and password reset token
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("discord") === "connected" || params.get("steam") === "connected") {
       refreshUser();
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("reset")) {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -2696,6 +2792,8 @@ function AppShell() {
       <span style={{ fontFamily:F.body, color:C.textMuted }}>Loading…</span>
     </div>
   );
+
+  if (resetToken) return <ResetPasswordView token={resetToken} onDone={() => setResetToken(null)} />;
 
   if (!user) return <AuthGate onAuth={(isNew) => { if (isNew) setShowOnboarding(true); }} />;
 

@@ -60,6 +60,8 @@ model User {
   status          UserStatus @default(offline)
   refreshToken    String?
 
+  resetTokens     PasswordResetToken[]
+
   // profile
   avatarUrl       String?   // base64 or CDN URL for profile photo
   phone           String?   // optional, for friend discovery
@@ -331,4 +333,18 @@ model Follow {
 
   @@id([followerId, followingId])
   @@map("follows")
+}
+
+// ─── PASSWORD RESET ───────────────────────────────────────────────────────────
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
 }

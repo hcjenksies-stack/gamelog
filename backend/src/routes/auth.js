@@ -117,6 +117,93 @@ router.post("/logout", async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+// POST /auth/forgot-password
+// Generates a reset token, stores it hashed, and emails a reset link.
+// Always returns 200 to prevent email enumeration.
+router.post("/forgot-password", async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "email required" });
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.json({ ok: true }); // silent — don't reveal whether email exists
+
+    const crypto = require("crypto");
+    const token     = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Invalidate any previous reset tokens for this user
+    await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+    await prisma.passwordResetToken.create({
+      data: {
+        userId:    user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+      },
+    });
+
+    const frontend  = process.env.FRONTEND_URL || "https://dist-ten-flame-88.vercel.app";
+    const resetLink = `${frontend}?reset=${token}`;
+
+    if (process.env.RESEND_API_KEY) {
+      await fetch("https://api.resend.com/emails", {
+        method:  "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type":  "application/json",
+        },
+        body: JSON.stringify({
+          from:    process.env.RESEND_FROM || "GameLog <noreply@gamelog.app>",
+          to:      [email],
+          subject: "Reset your GameLog password",
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px">
+  <h2 style="margin:0 0 8px">Reset your password</h2>
+  <p style="color:#6b7499;margin:0 0 24px">Hi ${user.username}, click the button below to set a new password. The link expires in 1 hour.</p>
+  <a href="${resetLink}" style="display:inline-block;padding:12px 24px;background:#5865f2;color:#fff;border-radius:10px;text-decoration:none;font-weight:700">Reset password</a>
+  <p style="color:#6b7499;font-size:12px;margin:24px 0 0">If you didn't request this, you can safely ignore this email.</p>
+</div>`,
+        }),
+      });
+    } else {
+      // Dev fallback — log the link so the developer can test without an email provider
+      console.log("[forgot-password] Reset link:", resetLink);
+    }
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /auth/reset-password
+// Verifies the token and updates the user's password.
+router.post("/reset-password", async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: "token and password required" });
+    if (password.length < 8)  return res.status(400).json({ error: "Password must be at least 8 characters" });
+
+    const crypto    = require("crypto");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
+    if (!record || record.expiresAt < new Date()) {
+      return res.status(400).json({ error: "Reset link is invalid or has expired" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    await prisma.user.update({
+      where: { id: record.userId },
+      data:  { passwordHash, refreshToken: null }, // log out all sessions
+    });
+
+    await prisma.passwordResetToken.delete({ where: { tokenHash } });
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // ─── Discord OAuth ─────────────────────────────────────────────────────────────
 
 // GET /auth/discord/url — returns the Discord OAuth URL for the logged-in user.
