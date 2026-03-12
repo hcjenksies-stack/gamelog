@@ -2826,7 +2826,7 @@ function GamesView({ onOpenFriend }) {
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchOpen,    setSearchOpen]    = useState(false);
-  const searchRef = React.useRef(null);
+  const searchRef = useRef(null);
 
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
