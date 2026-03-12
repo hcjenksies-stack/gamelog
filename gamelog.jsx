@@ -3076,36 +3076,6 @@ function GamesView({ onOpenFriend }) {
         })}
       </>}
 
-      {gameTab==="recs" && (
-        <div>
-          <div style={{ background:`linear-gradient(120deg,${C.accent}18,${C.surface})`, border:`1px solid ${C.accent}22`, borderRadius:14, padding:"12px 14px", marginBottom:14 }}>
-            <div style={{ fontFamily:F.body, fontWeight:800, fontSize:13, color:C.accentLight, marginBottom:3 }}>✦ Picked for you</div>
-            <div style={{ fontFamily:F.body, fontSize:12, color:C.textMuted, lineHeight:1.5 }}>Based on your playtime, genres, and completed games — synced from PS5, Xbox & Steam.</div>
-          </div>
-          <div style={{ display:"flex", gap:7, overflowX:"auto", paddingBottom:4, marginBottom:14 }}>
-            {["All","FromSoftware fans","Indie lovers","Story-driven","Based on Hollow Knight"].map((r,i)=>(
-              <Pill key={r} active={i===0} onClick={()=>{}}>{r}</Pill>
-            ))}
-          </div>
-          {[].map((g,i) => (
-            <div key={g.title} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:14, marginBottom:10, display:"flex", gap:12, alignItems:"center" }}>
-              <div style={{ width:58, height:72, borderRadius:12, border:`1px solid ${C.border2}`, overflow:"hidden", flexShrink:0, position:"relative" }}>
-                <GameCover title={g.title} emoji={g.cover} emojiSize={26} imgUrl={g.backgroundImage} />
-                {g.score && <div style={{ position:"absolute", bottom:0, left:0, right:0, textAlign:"center", fontFamily:F.mono, fontSize:8, color:"#fff", background:"rgba(0,0,0,0.6)", padding:"2px 0" }}>{g.score}</div>}
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontFamily:F.body, fontWeight:800, fontSize:14, color:C.text }}>{g.title}</div>
-                <div style={{ fontFamily:F.body, fontSize:11, color:C.textMuted, marginTop:2 }}>{g.genre}</div>
-                <div style={{ display:"flex", gap:5, alignItems:"center", marginTop:6 }}>
-                  <span style={{ fontSize:10 }}>✦</span>
-                  <span style={{ fontFamily:F.body, fontSize:11, color:C.accentLight, fontWeight:600 }}>{g.reason}</span>
-                </div>
-              </div>
-              <button style={{ padding:"7px 12px", borderRadius:10, background:C.accentSoft, border:`1px solid ${C.accentLight}44`, color:C.accentLight, fontFamily:F.body, fontWeight:700, fontSize:11, cursor:"pointer", flexShrink:0 }}>+ Log</button>
-            </div>
-          ))}
-        </div>
-      )}
 
       {selected&&<GameSheet game={selected} onClose={()=>setSelected(null)} />}
     </div>
